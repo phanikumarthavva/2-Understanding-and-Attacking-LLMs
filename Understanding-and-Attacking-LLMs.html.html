@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Understanding &amp; Attacking Large Language Models — Field Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0d1b2a;          /* deep navy base */
+    --ink-2:#13273b;        /* raised navy */
+    --ink-3:#1c3346;
+    --paper:#f2ede3;        /* parchment reading surface */
+    --paper-2:#e9e1d2;      /* recessed parchment */
+    --line:#c9bda6;         /* hairline on paper */
+    --amber:#e0a458;        /* structural signal */
+    --amber-deep:#c98a3a;
+    --teal:#4a7c7c;         /* concept / defense */
+    --teal-deep:#3a6363;
+    --rust:#b5533c;         /* offense / attack ONLY */
+    --rust-deep:#98422e;
+    --txt:#22303c;          /* body on paper */
+    --txt-soft:#54606b;
+    --paper-on-ink:#e7e0d2;
+    --soft-on-ink:#9fb0bd;
+    --maxw:74ch;
+    --font-d:"Fraunces",Georgia,serif;
+    --font-b:"IBM Plex Sans",system-ui,sans-serif;
+    --font-m:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{
+    margin:0;background:var(--paper);color:var(--txt);
+    font-family:var(--font-b);font-size:17px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+
+  /* ---------- HERO ---------- */
+  header.hero{
+    background:var(--ink);color:var(--paper-on-ink);
+    padding:88px 0 72px;position:relative;overflow:hidden;
+    border-bottom:3px solid var(--amber);
+  }
+  header.hero .wrap{position:relative;z-index:2}
+  .hero .kicker{
+    font-family:var(--font-m);font-size:.74rem;letter-spacing:.16em;
+    color:var(--amber);margin:0 0 20px;font-weight:500;
+  }
+  .hero h1{
+    font-family:var(--font-d);font-weight:600;
+    font-size:clamp(2.3rem,6vw,4rem);line-height:1.02;margin:0 0 22px;
+    letter-spacing:-.015em;color:#fff;
+  }
+  .hero h1 em{font-style:italic;color:var(--amber)}
+  .hero p.lede{
+    font-size:1.12rem;max-width:60ch;color:var(--soft-on-ink);margin:0 0 30px;
+  }
+  .hero .meta{
+    display:flex;flex-wrap:wrap;gap:10px 20px;font-family:var(--font-m);
+    font-size:.76rem;color:var(--soft-on-ink);border-top:1px solid rgba(255,255,255,.14);
+    padding-top:22px;
+  }
+  .hero .meta b{color:var(--paper-on-ink);font-weight:500}
+  /* faint grid motif, single non-animated moment */
+  header.hero::after{
+    content:"";position:absolute;inset:0;z-index:1;opacity:.4;
+    background:
+      linear-gradient(90deg,transparent 0 calc(100% - 1px),rgba(224,164,88,.10) calc(100% - 1px)) 0 0/58px 100%,
+      linear-gradient(0deg,transparent 0 calc(100% - 1px),rgba(224,164,88,.07) calc(100% - 1px)) 0 0/100% 58px;
+    -webkit-mask-image:radial-gradient(120% 80% at 82% 0%,#000,transparent 72%);
+            mask-image:radial-gradient(120% 80% at 82% 0%,#000,transparent 72%);
+  }
+
+  /* ---------- LAYOUT WITH NAV RAIL ---------- */
+  .shell{max-width:1120px;margin:0 auto;display:grid;
+    grid-template-columns:236px minmax(0,1fr);gap:0;padding:0 24px}
+  nav.toc{
+    position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+    padding:38px 26px 38px 0;border-right:1px solid var(--line);
+    font-size:.83rem;
+  }
+  nav.toc .tt{font-family:var(--font-m);font-size:.68rem;letter-spacing:.14em;
+    color:var(--txt-soft);margin:0 0 14px}
+  nav.toc ol{list-style:none;margin:0 0 20px;padding:0;counter-reset:s}
+  nav.toc ol li{counter-increment:s;margin:0 0 3px}
+  nav.toc ol li a{
+    display:block;text-decoration:none;color:var(--txt-soft);
+    padding:5px 9px 5px 30px;border-radius:5px;position:relative;line-height:1.35;
+  }
+  nav.toc ol li a::before{content:counter(s);position:absolute;left:9px;top:5px;
+    font-family:var(--font-m);font-size:.72rem;color:var(--amber-deep)}
+  nav.toc ol li a:hover{background:var(--paper-2);color:var(--ink)}
+  nav.toc ol li a.on{background:var(--ink);color:#fff}
+  nav.toc ol li a.on::before{color:var(--amber)}
+
+  main{padding:46px 0 90px;min-width:0}
+  @media (max-width:860px){
+    .shell{grid-template-columns:1fr;padding:0}
+    nav.toc{display:none}
+    main{padding:34px 0 70px}
+    .wrap{padding:0 20px}
+  }
+
+  /* ---------- SECTIONS ---------- */
+  section{scroll-margin-top:20px;padding:14px 0 30px}
+  .snum{font-family:var(--font-m);font-size:.72rem;letter-spacing:.12em;
+    color:var(--amber-deep);display:block;margin:0 0 8px}
+  h2{font-family:var(--font-d);font-weight:600;font-size:clamp(1.7rem,3.6vw,2.35rem);
+    line-height:1.08;letter-spacing:-.01em;margin:.2em 0 .5em;color:var(--ink)}
+  h3{font-family:var(--font-d);font-weight:600;font-size:1.32rem;line-height:1.2;
+    margin:1.9em 0 .5em;color:var(--ink)}
+  h4{font-family:var(--font-b);font-weight:600;font-size:1.02rem;margin:1.5em 0 .35em;
+    color:var(--ink);letter-spacing:.01em}
+  p{margin:0 0 1.05em}
+  a{color:var(--teal-deep)}
+  strong{font-weight:600;color:var(--ink)}
+  em{color:var(--txt)}
+  code{font-family:var(--font-m);font-size:.85em;background:var(--paper-2);
+    padding:.08em .38em;border-radius:4px;border:1px solid var(--line);color:var(--rust-deep)}
+  ul,ol{margin:0 0 1.1em;padding-left:1.35em}
+  li{margin:0 0 .5em}
+  ul.tight li,ol.tight li{margin:0 0 .28em}
+  .divider{height:1px;background:var(--line);border:0;margin:40px 0}
+  .lead-in{font-size:1.06rem;color:var(--txt);border-left:3px solid var(--amber);
+    padding:2px 0 2px 18px;margin:0 0 1.6em}
+
+  /* ---------- CALLOUTS ---------- */
+  .box{border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:1.4em 0;
+    background:#fbf8f1}
+  .box .h{font-family:var(--font-m);font-size:.72rem;letter-spacing:.11em;
+    margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .box .h::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--teal)}
+  .box p:last-child,.box ul:last-child{margin-bottom:0}
+  .box.attack{background:#fbf0ec;border-color:#e2b9ad}
+  .box.attack .h{color:var(--rust-deep)}
+  .box.attack .h::before{background:var(--rust)}
+  .box.key .h{color:var(--teal-deep)}
+  .box.defense{background:#eef4f3;border-color:#b6cfcc}
+  .box.defense .h{color:var(--teal-deep)}
+  .box.defense .h::before{background:var(--teal)}
+  .box.note{background:var(--paper-2);border-color:var(--line)}
+  .box.note .h{color:var(--txt-soft)}
+  .box.note .h::before{background:var(--amber-deep)}
+
+  /* ---------- TABLES ---------- */
+  .tbl{width:100%;border-collapse:collapse;margin:1.3em 0;font-size:.92rem}
+  .tbl th,.tbl td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);
+    vertical-align:top}
+  .tbl th{font-family:var(--font-b);font-weight:600;color:var(--ink);
+    background:var(--paper-2);font-size:.8rem;letter-spacing:.02em}
+  .tbl tr:last-child td{border-bottom:0}
+  .tbl code{background:transparent;border:0;padding:0;color:var(--rust-deep)}
+  .scroller{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:1.3em 0;
+    border:1px solid var(--line);border-radius:10px}
+  .scroller .tbl{margin:0}
+
+  /* ---------- TECHNIQUE ENTRIES ---------- */
+  .tech{border-top:1px solid var(--line);padding:15px 0 4px}
+  .tech:first-of-type{border-top:0}
+  .tech .tid{font-family:var(--font-m);font-size:.76rem;color:var(--rust-deep);
+    font-weight:500}
+  .tech .tnm{font-weight:600;color:var(--ink)}
+  .tech .plat{font-family:var(--font-m);font-size:.66rem;color:var(--txt-soft);
+    margin-left:6px}
+  .subt{font-family:var(--font-m);font-size:.78rem;color:var(--txt-soft);
+    margin:.5em 0 .2em;padding-left:2px}
+  .subt b{color:var(--rust-deep);font-weight:500}
+
+  /* ---------- ATLAS MATRIX ---------- */
+  .matrix{display:grid;grid-auto-flow:column;grid-auto-columns:170px;gap:8px;
+    padding:4px;min-width:min-content}
+  .mcol{background:#fbf8f1;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .mcol .mh{background:var(--ink);color:#fff;padding:10px 11px;font-size:.78rem;
+    font-weight:600;line-height:1.2;min-height:60px;display:flex;flex-direction:column;
+    justify-content:center;gap:3px}
+  .mcol .mh .mid{font-family:var(--font-m);font-size:.6rem;color:var(--amber);
+    font-weight:400;letter-spacing:.04em}
+  .mcol .mh.ai{background:var(--rust-deep)}
+  .mcol ul{list-style:none;margin:0;padding:0}
+  .mcol ul li{font-size:.7rem;line-height:1.25;padding:6px 9px;border-top:1px solid var(--line);
+    color:var(--txt)}
+  .mcol ul li.llm{color:var(--rust-deep);font-weight:500}
+  .mnote{font-size:.8rem;color:var(--txt-soft);margin:.6em 0 0}
+
+  /* ---------- DIAGRAM FRAME ---------- */
+  figure{margin:1.7em 0;text-align:center}
+  figure svg{max-width:100%;height:auto}
+  figcaption{font-size:.82rem;color:var(--txt-soft);margin-top:10px;
+    font-family:var(--font-b)}
+  .dframe{background:#fbf8f1;border:1px solid var(--line);border-radius:12px;padding:22px 18px}
+
+  /* ---------- MISC ---------- */
+  .pill{display:inline-block;font-family:var(--font-m);font-size:.66rem;
+    padding:2px 8px;border-radius:20px;letter-spacing:.04em;vertical-align:middle}
+  .pill.off{background:#f3ddd5;color:var(--rust-deep)}
+  .pill.def{background:#dcebe9;color:var(--teal-deep)}
+  .pill.new{background:#f7e6c7;color:var(--amber-deep)}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:.82rem;margin:1em 0 1.5em}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+  footer.end{background:var(--ink);color:var(--soft-on-ink);padding:40px 0;margin-top:40px;
+    font-size:.86rem}
+  footer.end .wrap{max-width:var(--maxw)}
+  footer.end a{color:var(--amber)}
+  footer.end h4{color:#fff;font-family:var(--font-d);margin-top:0}
+  .src{font-size:.78rem;color:var(--txt-soft);border-top:1px dashed var(--line);
+    padding-top:8px;margin-top:6px}
+  ::selection{background:var(--amber);color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">FIELD NOTES · AI SECURITY · OFFENSIVE + DEFENSIVE</p>
+    <h1>Understanding &amp; <em>Attacking</em><br>Large Language Models</h1>
+    <p class="lede">A working reference for security engineers: how LLMs are built and served, where their attack surface lives, and how adversary behaviour maps onto the MITRE ATLAS and ATT&amp;CK matrices — grounded in the current published data, not paraphrased memory.</p>
+    <div class="meta">
+      <span><b>Scope</b> LLM internals → threat modelling → real tooling</span>
+      <span><b>ATLAS baseline</b> v2026.09 (16 tactics · 208 techniques)</span>
+      <span><b>ATT&amp;CK baseline</b> Enterprise v19 (Apr 2026)</span>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <p class="tt">CONTENTS</p>
+    <ol>
+      <li><a href="#s1">Introduction to LLMs</a></li>
+      <li><a href="#s2">Understanding LLMs: GPT &amp; BERT</a></li>
+      <li><a href="#s3">Training &amp; Augmenting LLMs</a></li>
+      <li><a href="#s4">Use Cases of LLMs</a></li>
+      <li><a href="#s5">Attack Tactics &amp; Techniques</a></li>
+      <li><a href="#s6">Real-World LLM Attack Tools</a></li>
+    </ol>
+    <p class="tt" style="margin-top:8px">ATLAS TACTICS</p>
+    <ol start="1" style="counter-reset:s 0">
+      <li><a href="#t-recon">Reconnaissance</a></li>
+      <li><a href="#t-resdev">Resource Development</a></li>
+      <li><a href="#t-initial">Initial Access</a></li>
+      <li><a href="#t-modelaccess">AI Model Access</a></li>
+      <li><a href="#t-exec">Execution</a></li>
+      <li><a href="#t-persist">Persistence</a></li>
+      <li><a href="#t-privesc">Privilege Escalation</a></li>
+      <li><a href="#t-evasion">Defense Evasion</a></li>
+      <li><a href="#t-cred">Credential Access</a></li>
+      <li><a href="#t-discovery">Discovery</a></li>
+      <li><a href="#t-collection">Collection</a></li>
+      <li><a href="#t-staging">AI Attack Staging</a></li>
+      <li><a href="#t-exfil">Exfiltration</a></li>
+      <li><a href="#t-impact">Impact</a></li>
+    </ol>
+  </nav>
+
+  <main>
+<!-- ============ SECTION 1 ============ -->
+<section id="s1">
+  <div class="wrap">
+  <span class="snum">SECTION 01</span>
+  <h2>Introduction to Large Language Models</h2>
+  <p class="lead-in">Before you can attack or defend an LLM, you need an accurate mechanical picture of what it is: a probabilistic next-token predictor, trained at scale, wrapped in an application. Almost every attack in this document exploits one of those three layers.</p>
+
+  <h3>1.1 &nbsp;Definition</h3>
+  <p>A <strong>Large Language Model (LLM)</strong> is a neural network — in practice, a <em>Transformer</em> — trained on very large text corpora to model the probability distribution of the next unit of text (a <em>token</em>) given the text that came before it. "Large" refers to two dimensions that scale together: the number of learned parameters (billions to trillions) and the size of the training corpus (hundreds of billions to trillions of tokens).</p>
+  <p>Two properties matter for security:</p>
+  <ul>
+    <li><strong>It is generative and probabilistic.</strong> The model does not retrieve a stored answer; it samples a plausible continuation. The same input can yield different outputs, and confidently-worded output can be entirely fabricated (a <em>hallucination</em>). Attackers weaponise both — hallucinations become squattable package names, and non-determinism frustrates naive signature detection.</li>
+    <li><strong>It cannot separate instructions from data.</strong> A classic program has a control plane (code) and a data plane (input) that are architecturally distinct. An LLM receives a single undifferentiated stream of tokens. System prompt, developer instructions, user input, and retrieved documents all arrive as text and are weighed by the same attention mechanism. <em>This single fact is the root cause of prompt injection</em> — the defining vulnerability class of the LLM era.</li>
+  </ul>
+
+  <h3>1.2 &nbsp;How LLMs work</h3>
+  <p>The pipeline from raw text to generated output has a small number of stages. Understanding each one tells you where an adversary can insert themselves.</p>
+
+  <figure>
+    <div class="dframe">
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, sans-serif" role="img" aria-label="Transformer inference pipeline: tokenize, embed, transformer blocks with attention, output distribution, sampling">
+        <defs>
+          <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#54606b"/></marker>
+        </defs>
+        <!-- input -->
+        <rect x="8" y="120" width="96" height="56" rx="7" fill="#13273b"/>
+        <text x="56" y="143" fill="#fff" font-size="12" text-anchor="middle" font-weight="600">Input text</text>
+        <text x="56" y="160" fill="#9fb0bd" font-size="9.5" text-anchor="middle">"The capital…"</text>
+        <!-- tokenize -->
+        <rect x="128" y="120" width="96" height="56" rx="7" fill="#fbf8f1" stroke="#c9bda6"/>
+        <text x="176" y="141" fill="#22303c" font-size="11.5" text-anchor="middle" font-weight="600">Tokenizer</text>
+        <text x="176" y="158" fill="#54606b" font-size="9" text-anchor="middle">→ token IDs</text>
+        <!-- embed -->
+        <rect x="248" y="120" width="96" height="56" rx="7" fill="#fbf8f1" stroke="#c9bda6"/>
+        <text x="296" y="141" fill="#22303c" font-size="11.5" text-anchor="middle" font-weight="600">Embedding</text>
+        <text x="296" y="158" fill="#54606b" font-size="9" text-anchor="middle">+ position</text>
+        <!-- transformer stack -->
+        <rect x="368" y="86" width="150" height="124" rx="9" fill="#eef4f3" stroke="#4a7c7c"/>
+        <text x="443" y="104" fill="#3a6363" font-size="11.5" text-anchor="middle" font-weight="600">Transformer ×N</text>
+        <rect x="382" y="114" width="122" height="30" rx="5" fill="#fff" stroke="#b6cfcc"/>
+        <text x="443" y="133" fill="#22303c" font-size="10" text-anchor="middle">Self-attention</text>
+        <rect x="382" y="150" width="122" height="26" rx="5" fill="#fff" stroke="#b6cfcc"/>
+        <text x="443" y="167" fill="#22303c" font-size="10" text-anchor="middle">Feed-forward</text>
+        <text x="443" y="196" fill="#3a6363" font-size="8.5" text-anchor="middle">residual + norm</text>
+        <!-- output dist -->
+        <rect x="542" y="120" width="96" height="56" rx="7" fill="#fbf0ec" stroke="#e2b9ad"/>
+        <text x="590" y="141" fill="#98422e" font-size="11" text-anchor="middle" font-weight="600">Next-token</text>
+        <text x="590" y="157" fill="#98422e" font-size="11" text-anchor="middle" font-weight="600">probs</text>
+        <!-- sample loop -->
+        <rect x="542" y="218" width="96" height="40" rx="7" fill="#13273b"/>
+        <text x="590" y="236" fill="#fff" font-size="10.5" text-anchor="middle" font-weight="600">Sample token</text>
+        <text x="590" y="250" fill="#9fb0bd" font-size="8.5" text-anchor="middle">temp / top-p</text>
+        <!-- arrows -->
+        <line x1="104" y1="148" x2="126" y2="148" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar)"/>
+        <line x1="224" y1="148" x2="246" y2="148" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar)"/>
+        <line x1="344" y1="148" x2="366" y2="148" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar)"/>
+        <line x1="518" y1="148" x2="540" y2="148" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar)"/>
+        <line x1="590" y1="176" x2="590" y2="216" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar)"/>
+        <path d="M542,238 C420,270 300,230 176,178" fill="none" stroke="#b5533c" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+        <text x="330" y="266" fill="#b5533c" font-size="9" text-anchor="middle">autoregressive loop — append token, repeat</text>
+      </svg>
+    </div>
+    <figcaption>Inference pipeline. Text is split into tokens, mapped to vectors, passed through N Transformer blocks, and turned into a probability distribution over the vocabulary. One token is sampled, appended, and the loop repeats.</figcaption>
+  </figure>
+
+  <h4>Tokenization</h4>
+  <p>Text is split into <em>tokens</em> — sub-word units (e.g. <code>token</code>, <code>##ization</code>) using a scheme such as Byte-Pair Encoding. Tokenization is exploitable: unusual Unicode, invisible characters, or encoding tricks (Base64, ROT13) can produce token sequences that slip past keyword-based guardrails while still meaning something to the model.</p>
+  <h4>Embedding &amp; positional encoding</h4>
+  <p>Each token ID becomes a high-dimensional vector (an <em>embedding</em>) that captures learned meaning; positional information is added so the model knows token order. Semantically similar tokens sit close together in this space — the property that makes embedding-based retrieval (and RAG) possible, and that also lets an attacker craft inputs that are "near" a target concept.</p>
+  <h4>The Transformer block &amp; self-attention</h4>
+  <p>The core innovation (Vaswani et al., 2017, <em>"Attention Is All You Need"</em>) is <strong>self-attention</strong>: for every token, the model computes how much every other token should influence it, in parallel. Stacking many attention + feed-forward blocks lets the model build a rich contextual representation. Because attention weighs <em>all</em> tokens in the context window against each other, an injected instruction buried in a retrieved document can pull the model's behaviour just as strongly as the developer's system prompt.</p>
+  <h4>Output distribution &amp; sampling</h4>
+  <p>The final layer emits a probability (via <em>softmax</em>) over the whole vocabulary for the next token. A <em>decoding</em> strategy then picks one — greedily, or by sampling controlled by <code>temperature</code> and <code>top-p</code>. Higher temperature means more randomness. This stage is why identical prompts give varying answers, and why "just block the bad output string" is not a durable control.</p>
+
+  <div class="box key">
+    <p class="h">SECURITY READ-THROUGH</p>
+    <p>Map the stages to attack surface: <strong>tokenizer</strong> → obfuscation/encoding bypass; <strong>context window</strong> → prompt injection &amp; instruction/data confusion; <strong>training data</strong> → poisoning &amp; backdoors; <strong>output layer</strong> → data leakage, insecure rendering, unsafe tool calls. Every later section returns to these four.</p>
+  </div>
+
+  <h3>1.3 &nbsp;Importance &amp; impact</h3>
+  <p>LLMs matter to security not because they are novel, but because of <em>where they are being placed</em>: as reasoning layers wired directly into email, code repositories, ticketing systems, customer support, SOC tooling, and — most consequentially — <strong>autonomous agents</strong> that can call tools, browse, and execute actions on a user's behalf.</p>
+  <ul>
+    <li><strong>New attack surface, old consequences.</strong> A prompt injection is novel; the outcome — arbitrary code execution, data exfiltration, fraudulent transactions — is not. The LLM becomes a <em>confused deputy</em>: a trusted component that an attacker persuades to misuse its own privileges.</li>
+    <li><strong>Trust inversion.</strong> Organisations grant agents broad access on the assumption the model is loyal. Once the model can be steered by untrusted input (a web page, an email, a calendar invite), that access becomes the attacker's access.</li>
+    <li><strong>Scale for the offence too.</strong> The same generative capability that helps defenders writes fluent phishing at volume, generates polymorphic malware, and — as of 2026 — drives semi-autonomous intrusion campaigns. Section 6 covers the criminal tooling built around exactly this.</li>
+  </ul>
+  <p>This is why frameworks like <strong>MITRE ATLAS</strong> exist: to give this new-but-familiar threat landscape a shared vocabulary, which Section 5 works through tactic by tactic.</p>
+  </div>
+</section>
+<hr class="divider">
+<!-- ============ SECTION 2 ============ -->
+<section id="s2">
+  <div class="wrap">
+  <span class="snum">SECTION 02</span>
+  <h2>Understanding LLMs: Two Architectures</h2>
+  <p class="lead-in">"Transformer" is one idea with two dominant families. Knowing which family a system uses tells you what it can be made to do — and therefore how you would attack it.</p>
+
+  <figure>
+    <div class="dframe">
+      <svg viewBox="0 0 700 250" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, sans-serif" role="img" aria-label="Comparison of GPT decoder-only left-to-right generation versus BERT encoder bidirectional understanding">
+        <!-- GPT side -->
+        <rect x="14" y="14" width="320" height="222" rx="10" fill="#fbf0ec" stroke="#e2b9ad"/>
+        <text x="174" y="40" fill="#98422e" font-size="14" text-anchor="middle" font-weight="700" font-family="Fraunces, serif">GPT — Decoder-only</text>
+        <text x="174" y="58" fill="#98422e" font-size="10" text-anchor="middle">causal, left → right, generative</text>
+        <!-- tokens -->
+        <g font-size="11" text-anchor="middle">
+          <rect x="34" y="88" width="52" height="30" rx="5" fill="#fff" stroke="#e2b9ad"/><text x="60" y="107" fill="#22303c">The</text>
+          <rect x="94" y="88" width="52" height="30" rx="5" fill="#fff" stroke="#e2b9ad"/><text x="120" y="107" fill="#22303c">sky</text>
+          <rect x="154" y="88" width="52" height="30" rx="5" fill="#fff" stroke="#e2b9ad"/><text x="180" y="107" fill="#22303c">is</text>
+          <rect x="214" y="88" width="66" height="30" rx="5" fill="#b5533c"/><text x="247" y="107" fill="#fff" font-weight="600">blue?</text>
+        </g>
+        <path d="M86,103 L92,103 M146,103 L152,103 M206,103 L212,103" stroke="#98422e" stroke-width="1.4"/>
+        <path d="M247,118 C247,150 247,150 247,168" stroke="#98422e" stroke-width="1.5" stroke-dasharray="3 2"/>
+        <text x="247" y="184" fill="#98422e" font-size="10" text-anchor="middle" font-weight="600">predicts next token</text>
+        <text x="174" y="214" fill="#54606b" font-size="9.5" text-anchor="middle">each token sees only what came before</text>
+        <!-- BERT side -->
+        <rect x="366" y="14" width="320" height="222" rx="10" fill="#eef4f3" stroke="#b6cfcc"/>
+        <text x="526" y="40" fill="#3a6363" font-size="14" text-anchor="middle" font-weight="700" font-family="Fraunces, serif">BERT — Encoder-only</text>
+        <text x="526" y="58" fill="#3a6363" font-size="10" text-anchor="middle">bidirectional, understanding</text>
+        <g font-size="11" text-anchor="middle">
+          <rect x="386" y="88" width="52" height="30" rx="5" fill="#fff" stroke="#b6cfcc"/><text x="412" y="107" fill="#22303c">The</text>
+          <rect x="446" y="88" width="60" height="30" rx="5" fill="#4a7c7c"/><text x="476" y="107" fill="#fff" font-weight="600">[MASK]</text>
+          <rect x="514" y="88" width="52" height="30" rx="5" fill="#fff" stroke="#b6cfcc"/><text x="540" y="107" fill="#22303c">is</text>
+          <rect x="574" y="88" width="66" height="30" rx="5" fill="#fff" stroke="#b6cfcc"/><text x="607" y="107" fill="#22303c">blue</text>
+        </g>
+        <path d="M412,120 C440,150 460,150 474,122" fill="none" stroke="#3a6363" stroke-width="1.3"/>
+        <path d="M540,120 C512,150 492,150 478,122" fill="none" stroke="#3a6363" stroke-width="1.3"/>
+        <path d="M607,120 C560,158 505,158 480,124" fill="none" stroke="#3a6363" stroke-width="1.3"/>
+        <text x="526" y="184" fill="#3a6363" font-size="10" text-anchor="middle" font-weight="600">fills mask from both sides</text>
+        <text x="526" y="214" fill="#54606b" font-size="9.5" text-anchor="middle">each token sees the whole sentence</text>
+      </svg>
+    </div>
+    <figcaption>Decoder-only models (GPT) generate one token at a time, attending only to the left context — ideal for open-ended generation. Encoder-only models (BERT) attend in both directions to build a representation — ideal for understanding and classification.</figcaption>
+  </figure>
+
+  <h3>2.1 &nbsp;GPT — Generative Pre-trained Transformer</h3>
+  <p>GPT is a <strong>decoder-only</strong>, <em>autoregressive</em> architecture. It is trained with a single objective — predict the next token — over enormous unlabelled corpora, then adapted to follow instructions (Section 3). "Causal" (or masked) self-attention means each position can attend only to earlier positions, which is what makes coherent left-to-right generation possible.</p>
+  <ul class="tight">
+    <li><strong>Pre-trained</strong> — general language competence learned once, at great cost, from raw text.</li>
+    <li><strong>Generative</strong> — produces novel text, code, and structured output rather than labelling existing text.</li>
+    <li><strong>Transformer</strong> — the attention-based backbone from Section 1.</li>
+  </ul>
+  <p>GPT-family models (and their open counterparts — LLaMA, Mistral, Falcon, GPT-J, and so on) are what people mean by "an LLM" in the chat/agent sense. They are the target of prompt injection, jailbreaks, system-prompt extraction, and tool-abuse — the generative-AI-specific techniques that dominate Section 5. Notably, <strong>GPT-J 6B</strong>, an open model released by EleutherAI in 2021, is the base that the original WormGPT was built on (Section 6).</p>
+
+  <h3>2.2 &nbsp;BERT — Bidirectional Encoder Representations from Transformers</h3>
+  <p>BERT (Google, 2018) is an <strong>encoder-only</strong> architecture built for <em>understanding</em> rather than generation. Its key training objective is the <em>Masked Language Model</em>: random tokens are hidden and the model predicts them using context from <em>both</em> directions. This bidirectional context yields rich representations well-suited to classification, named-entity recognition, sentiment analysis, and — relevant to security — powering the embedding and retrieval components inside larger systems.</p>
+  <p>BERT is less a chatbot and more a workhorse for text understanding embedded in pipelines. In an attack context it appears on both sides: as a defensive classifier (e.g. an ML phishing/malware detector an attacker wants to evade), and as a component an attacker may try to poison or fingerprint.</p>
+
+  <div class="box note">
+    <p class="h">WHY THE DISTINCTION MATTERS FOR ATTACKERS</p>
+    <p>A <strong>generative (GPT-style)</strong> target invites input-side manipulation — you steer what it <em>produces</em> and what tools it <em>invokes</em>. A <strong>discriminative (BERT-style)</strong> target invites evasion and poisoning — you manipulate inputs to flip a <em>classification</em>, or corrupt training data to plant a backdoor. ATLAS reflects this split explicitly through its <span class="pill def">Predictive AI</span> vs <span class="pill off">Generative AI</span> vs <span class="pill off">Agentic AI</span> platform tags on each technique.</p>
+  </div>
+  </div>
+</section>
+<hr class="divider">
+<!-- ============ SECTION 3 ============ -->
+<section id="s3">
+  <div class="wrap">
+  <span class="snum">SECTION 03</span>
+  <h2>Training &amp; Augmenting LLMs</h2>
+  <p class="lead-in">A model's capabilities are shaped in three ways: what it learns during pre-training, how it is fine-tuned afterward, and what external knowledge is fed to it at run time. Each is a distinct point of attack.</p>
+
+  <h3>3.1 &nbsp;Foundational vs fine-tuned models</h3>
+  <p>A <strong>foundation (base) model</strong> is the product of expensive, general-purpose <em>pre-training</em> on a broad corpus. It has broad competence but is not yet aligned to a task or to human preferences — a raw base model will happily complete text without regard for helpfulness or safety.</p>
+  <p>A <strong>fine-tuned model</strong> takes that foundation and continues training on a narrower, curated dataset to specialise it. Two important sub-types:</p>
+  <ul>
+    <li><strong>Supervised fine-tuning (SFT) / instruction tuning</strong> — teaches the model to follow instructions and adopt a helpful assistant format.</li>
+    <li><strong>Alignment tuning (RLHF / preference optimisation)</strong> — shapes the model toward human-preferred, safer responses. <em>Guardrails and refusals largely live here.</em> Jailbreaks (ATLAS <code>AML.T0054</code>) are attempts to override precisely this layer.</li>
+  </ul>
+
+  <figure>
+    <div class="dframe">
+      <svg viewBox="0 0 700 176" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, sans-serif" role="img" aria-label="From massive corpus to base model to fine-tuned aligned model, with poisoning attack points">
+        <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#54606b"/></marker></defs>
+        <rect x="14" y="58" width="128" height="60" rx="8" fill="#13273b"/>
+        <text x="78" y="83" fill="#fff" font-size="12" text-anchor="middle" font-weight="600">Web-scale</text>
+        <text x="78" y="99" fill="#9fb0bd" font-size="10" text-anchor="middle">corpus</text>
+        <rect x="196" y="58" width="128" height="60" rx="8" fill="#fbf8f1" stroke="#c9bda6"/>
+        <text x="260" y="80" fill="#22303c" font-size="12" text-anchor="middle" font-weight="600">Foundation</text>
+        <text x="260" y="96" fill="#54606b" font-size="10" text-anchor="middle">model (base)</text>
+        <text x="260" y="110" fill="#54606b" font-size="8.5" text-anchor="middle">pre-training</text>
+        <rect x="378" y="58" width="128" height="60" rx="8" fill="#fbf8f1" stroke="#c9bda6"/>
+        <text x="442" y="80" fill="#22303c" font-size="12" text-anchor="middle" font-weight="600">Fine-tuned</text>
+        <text x="442" y="96" fill="#54606b" font-size="10" text-anchor="middle">SFT + RLHF</text>
+        <text x="442" y="110" fill="#54606b" font-size="8.5" text-anchor="middle">aligned / task-specific</text>
+        <rect x="560" y="58" width="126" height="60" rx="8" fill="#eef4f3" stroke="#4a7c7c"/>
+        <text x="623" y="83" fill="#3a6363" font-size="12" text-anchor="middle" font-weight="600">Deployed</text>
+        <text x="623" y="99" fill="#3a6363" font-size="10" text-anchor="middle">assistant / agent</text>
+        <line x1="142" y1="88" x2="194" y2="88" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar2)"/>
+        <line x1="324" y1="88" x2="376" y2="88" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar2)"/>
+        <line x1="506" y1="88" x2="558" y2="88" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar2)"/>
+        <!-- attack markers -->
+        <g fill="#b5533c" font-size="9" text-anchor="middle">
+          <circle cx="78" cy="34" r="4"/><text x="78" y="24">data poisoning</text>
+          <circle cx="260" cy="34" r="4"/><text x="260" y="24">backdoor / model tamper</text>
+          <circle cx="442" cy="146" r="4"/><text x="442" y="162">alignment bypass (jailbreak)</text>
+        </g>
+        <line x1="78" y1="38" x2="78" y2="56" stroke="#b5533c" stroke-width="1.2" stroke-dasharray="2 2"/>
+        <line x1="260" y1="38" x2="260" y2="56" stroke="#b5533c" stroke-width="1.2" stroke-dasharray="2 2"/>
+        <line x1="442" y1="120" x2="442" y2="142" stroke="#b5533c" stroke-width="1.2" stroke-dasharray="2 2"/>
+      </svg>
+    </div>
+    <figcaption>The training lifecycle and where adversaries insert themselves: poisoning the pre-training corpus, tampering with or backdooring the model artifact, or bypassing the alignment layer at inference time.</figcaption>
+  </figure>
+
+  <div class="box attack">
+    <p class="h">ATTACK SURFACE ACROSS THE LIFECYCLE</p>
+    <ul class="tight">
+      <li><strong>Training-time:</strong> data poisoning (<code>AML.T0020</code>), model backdoors / trojans, and publishing poisoned datasets or models to the supply chain (<code>AML.T0115</code>). A poisoned base model contaminates every downstream fine-tune.</li>
+      <li><strong>Artifact-time:</strong> a distributed model file can carry malware in an unsafe serialization format, or be corrupted to defeat a scanner while still executing (<code>AML.T0076</code>). Real cases include malicious models on Hugging Face and the compromised PyTorch dependency chain.</li>
+      <li><strong>Inference-time:</strong> jailbreaks and prompt injection attack the aligned behaviour directly, without touching weights.</li>
+    </ul>
+  </div>
+
+  <h3>3.2 &nbsp;Retrieval-Augmented Generation (RAG)</h3>
+  <p>A fine-tuned model still only knows what was in its training data, frozen at a cutoff. <strong>RAG</strong> closes that gap by fetching relevant external documents at query time and inserting them into the prompt as context, so the model can answer using current or private knowledge it never memorised.</p>
+  <p>The flow: the user query is embedded into a vector; a <em>vector database</em> returns the nearest-matching document chunks; those chunks are concatenated with the query and the system prompt; the assembled prompt goes to the LLM; the LLM answers grounded in the retrieved text.</p>
+
+  <figure>
+    <div class="dframe">
+      <svg viewBox="0 0 700 210" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, sans-serif" role="img" aria-label="RAG flow: query embedded, vector DB retrieval, context assembled with prompt, sent to LLM, answer returned; poisoning of the knowledge source shown as attack">
+        <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#54606b"/></marker></defs>
+        <rect x="12" y="90" width="96" height="46" rx="7" fill="#13273b"/><text x="60" y="110" fill="#fff" font-size="11" text-anchor="middle" font-weight="600">User query</text><text x="60" y="125" fill="#9fb0bd" font-size="9" text-anchor="middle">→ embedding</text>
+        <rect x="140" y="90" width="104" height="46" rx="7" fill="#fbf8f1" stroke="#c9bda6"/><text x="192" y="110" fill="#22303c" font-size="11" text-anchor="middle" font-weight="600">Vector DB</text><text x="192" y="125" fill="#54606b" font-size="9" text-anchor="middle">nearest chunks</text>
+        <rect x="140" y="18" width="104" height="46" rx="7" fill="#fbf0ec" stroke="#e2b9ad"/><text x="192" y="38" fill="#98422e" font-size="10.5" text-anchor="middle" font-weight="600">Knowledge</text><text x="192" y="53" fill="#98422e" font-size="10.5" text-anchor="middle">source</text>
+        <rect x="278" y="90" width="112" height="46" rx="7" fill="#fbf8f1" stroke="#c9bda6"/><text x="334" y="107" fill="#22303c" font-size="11" text-anchor="middle" font-weight="600">Assemble</text><text x="334" y="122" fill="#54606b" font-size="8.5" text-anchor="middle">prompt + context</text>
+        <rect x="424" y="90" width="96" height="46" rx="7" fill="#eef4f3" stroke="#4a7c7c"/><text x="472" y="110" fill="#3a6363" font-size="11" text-anchor="middle" font-weight="600">LLM</text><text x="472" y="125" fill="#3a6363" font-size="9" text-anchor="middle">generate</text>
+        <rect x="556" y="90" width="120" height="46" rx="7" fill="#13273b"/><text x="616" y="116" fill="#fff" font-size="11" text-anchor="middle" font-weight="600">Grounded answer</text>
+        <line x1="108" y1="113" x2="138" y2="113" stroke="#54606b" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="192" y1="64" x2="192" y2="88" stroke="#54606b" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="244" y1="113" x2="276" y2="113" stroke="#54606b" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="390" y1="113" x2="422" y2="113" stroke="#54606b" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="520" y1="113" x2="554" y2="113" stroke="#54606b" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <text x="192" y="80" fill="#b5533c" font-size="9" text-anchor="middle" font-weight="600">⚠ poison here → tainted context</text>
+        <text x="350" y="176" fill="#54606b" font-size="9.5" text-anchor="middle">retrieved documents enter the prompt as trusted text — but they are just tokens</text>
+        <text x="350" y="192" fill="#b5533c" font-size="9.5" text-anchor="middle">RAG Poisoning (AML.T0070) · False RAG Entry Injection (AML.T0071) · RAG Credential Harvesting (AML.T0082)</text>
+      </svg>
+    </div>
+    <figcaption>RAG architecture. The knowledge source and vector store are new, high-value attack surface: content an adversary can get indexed becomes context the model treats as authoritative.</figcaption>
+  </figure>
+
+  <div class="box key">
+    <p class="h">WHY RAG IS A SECURITY PIVOT</p>
+    <p>RAG dissolves the boundary between "the model's knowledge" and "attacker-supplied text." Anything an adversary can plant where the RAG system indexes — a wiki page, a shared drive, a public web page, an email — can surface as retrieved context and carry hidden instructions (indirect prompt injection) or false facts. This is why ATLAS has an entire cluster of RAG-specific techniques, and why the <em>Morris II</em> self-replicating worm and <em>Slack AI</em> / <em>M365 Copilot</em> exfiltration cases all pivot through retrieval. Treat every indexed source as untrusted input.</p>
+  </div>
+  </div>
+</section>
+<hr class="divider">
+<!-- ============ SECTION 4 ============ -->
+<section id="s4">
+  <div class="wrap">
+  <span class="snum">SECTION 04</span>
+  <h2>Use Cases of LLMs</h2>
+  <p class="lead-in">The point of cataloguing use cases here is not the capabilities themselves but the <em>trust and access</em> each one is granted. Where an LLM is wired, and what it is allowed to touch, defines the blast radius when it is subverted.</p>
+
+  <h3>4.1 &nbsp;Text Generation</h3>
+  <p>The canonical capability: producing fluent novel text — drafting, summarising, translating, code generation, and content creation. Generation is what makes LLMs productive and what makes them dangerous in adversarial hands.</p>
+  <div class="box attack">
+    <p class="h">OFFENSIVE MISUSE</p>
+    <p>Fluent generation at scale powers phishing and business-email-compromise lures (<code>AML.T0052.000</code> — Spearphishing via Social Engineering LLM), malware and exploit code (<code>AML.T0102</code> — Generate Malicious Commands), disinformation, and deepfake text/media (<code>AML.T0088</code>). The criminal tools in Section 6 exist almost entirely to remove the guardrails that would otherwise refuse these requests.</p>
+  </div>
+
+  <h3>4.2 &nbsp;Text Understanding</h3>
+  <p>Classification, extraction, sentiment, semantic search, and content moderation — the discriminative tasks BERT-style models excel at. This is heavily used <em>defensively</em>: ML-based malware detectors, phishing-page classifiers, and spam filters are themselves models.</p>
+  <div class="box attack">
+    <p class="h">OFFENSIVE MISUSE</p>
+    <p>When the "understanding" model is a defence, the attacker's goal is <strong>evasion</strong> (<code>AML.T0015</code> — Evade AI Model) or <strong>poisoning</strong> its training data. ATLAS case studies include evading a deep-learning malware C2 detector, bypassing Cylance's AI malware detection, ProofPoint evasion, and attempted evasion of an ML phishing-webpage detector. When the understanding model is the attacker's <em>own</em> reconnaissance tool, it triages stolen data or fingerprints targets at scale.</p>
+  </div>
+
+  <h3>4.3 &nbsp;Conversational AI &amp; Agents</h3>
+  <p>Multi-turn assistants that maintain context — and, increasingly, <strong>agents</strong> that plan and act: calling tools, querying databases, running code, browsing the web, sending email, and operating other software (including via the Model Context Protocol, MCP). This is the highest-risk deployment pattern because the model's decisions become <em>actions in the world</em>.</p>
+
+  <figure>
+    <div class="dframe">
+      <svg viewBox="0 0 700 210" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, sans-serif" role="img" aria-label="Agentic loop: user goal to LLM planner to tool calls acting on email, code, web, files, with untrusted content feeding back in as injection">
+        <circle cx="350" cy="100" r="52" fill="#eef4f3" stroke="#4a7c7c"/>
+        <text x="350" y="94" fill="#3a6363" font-size="13" text-anchor="middle" font-weight="700" font-family="Fraunces, serif">LLM</text>
+        <text x="350" y="112" fill="#3a6363" font-size="11" text-anchor="middle">planner</text>
+        <rect x="286" y="8" width="128" height="34" rx="7" fill="#13273b"/><text x="350" y="30" fill="#fff" font-size="11" text-anchor="middle" font-weight="600">User goal</text>
+        <line x1="350" y1="42" x2="350" y2="46" stroke="#54606b" stroke-width="1.5"/>
+        <path d="M350,46 L350,46" /><line x1="350" y1="44" x2="350" y2="47" stroke="#54606b" stroke-width="1.6" marker-end="url(#ar3)"/>
+        <!-- tools -->
+        <g font-size="10.5" text-anchor="middle">
+          <rect x="470" y="20" width="96" height="34" rx="7" fill="#fbf8f1" stroke="#c9bda6"/><text x="518" y="41" fill="#22303c">✉ Email</text>
+          <rect x="586" y="80" width="100" height="34" rx="7" fill="#fbf8f1" stroke="#c9bda6"/><text x="636" y="101" fill="#22303c">⌨ Code / shell</text>
+          <rect x="470" y="146" width="96" height="34" rx="7" fill="#fbf8f1" stroke="#c9bda6"/><text x="518" y="167" fill="#22303c">🌐 Web / RAG</text>
+          <rect x="14" y="80" width="100" height="34" rx="7" fill="#fbf8f1" stroke="#c9bda6"/><text x="64" y="101" fill="#22303c">🗄 Files / DB</text>
+        </g>
+        <line x1="400" y1="78" x2="468" y2="40" stroke="#4a7c7c" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="402" y1="100" x2="584" y2="98" stroke="#4a7c7c" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="400" y1="122" x2="468" y2="160" stroke="#4a7c7c" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <line x1="298" y1="100" x2="116" y2="99" stroke="#4a7c7c" stroke-width="1.5" marker-end="url(#ar3)"/>
+        <!-- injection feedback -->
+        <path d="M518,146 C440,150 380,150 372,148" fill="none" stroke="#b5533c" stroke-width="1.6" stroke-dasharray="4 3" marker-end="url(#ar3)"/>
+        <text x="350" y="200" fill="#b5533c" font-size="9.5" text-anchor="middle" font-weight="600">untrusted web/doc content flows back into context → indirect prompt injection hijacks the loop</text>
+      </svg>
+    </div>
+    <figcaption>The agentic loop. The model reads a goal, plans, calls tools, observes results, and repeats. The danger: tool <em>outputs</em> (a fetched web page, a retrieved email) re-enter the context as trusted text and can carry instructions that redirect every subsequent action.</figcaption>
+  </figure>
+
+  <div class="box key">
+    <p class="h">THE CONFUSED-DEPUTY PROBLEM, MADE CONCRETE</p>
+    <p>An agent inherits the privileges of the identity it runs as. If untrusted content can steer it (indirect injection, poisoned RAG, a crafted email or calendar invite), the attacker inherits those privileges without ever authenticating. ATLAS's newest tactics and mitigations — <em>AI Agent Authority Expansion Controls</em> (<code>AML.M0037</code>), <em>Human In-the-Loop for AI Agent Actions</em> (<code>AML.M0029</code>), <em>Restrict AI Agent Tool Invocation on Untrusted Data</em> (<code>AML.M0030</code>) — exist specifically to bound this. Section 5's agentic techniques (tool poisoning, tool invocation, data destruction via tools) all live in this loop.</p>
+  </div>
+  </div>
+</section>
+<hr class="divider">
+<!-- ============ SECTION 5 ============ -->
+<section id="s5">
+  <div class="wrap">
+  <span class="snum">SECTION 05</span>
+  <h2>Attack Tactics &amp; Techniques</h2>
+  <p class="lead-in">A tactic is an adversary's <em>goal</em> ("why"); a technique is <em>how</em> they achieve it. MITRE organises both into a matrix so defenders can reason about coverage. There are two matrices you must not confuse.</p>
+
+  <h3>5.1 &nbsp;MITRE ATT&amp;CK</h3>
+  <p><strong>MITRE ATT&amp;CK</strong> (Adversarial Tactics, Techniques &amp; Common Knowledge) is the globally-used knowledge base of adversary behaviour against <em>conventional</em> IT — endpoints, networks, cloud, ICS. Tactics are ordered roughly by attack progression, from Reconnaissance through Impact. Every technique carries an ID like <code>T1566</code> (Phishing).</p>
+  <p>ATT&amp;CK is a <em>living</em> framework. Its most significant structural change in years shipped as <strong>ATT&amp;CK v19 on 28 April 2026</strong>: the long-overloaded <em>Defense Evasion</em> tactic (<code>TA0005</code>) was split into <strong>Stealth</strong> (which keeps <code>TA0005</code> — blending into legitimate behaviour) and <strong>Defense Impairment</strong> (<code>TA0112</code> — actively disabling controls). Enterprise ATT&amp;CK v19 comprises 15 tactics, 222 techniques, and 475 sub-techniques. If your detections still map to the old unitary "Defense Evasion," they now describe a narrower world and need remapping.</p>
+
+  <h3>5.2 &nbsp;MITRE ATLAS matrix</h3>
+  <p><strong>ATLAS</strong> (Adversarial Threat Landscape for Artificial-Intelligence Systems) is ATT&amp;CK's counterpart for AI. It reuses ATT&amp;CK's Tactic → Technique → Mitigation → Case-study structure but focuses on attacks against AI-enabled systems, abuse of AI capabilities, and harmful autonomous behaviour. IDs use the <code>AML.</code> prefix — tactics <code>AML.TA####</code>, techniques <code>AML.T####</code>, mitigations <code>AML.M####</code>, case studies <code>AML.CS####</code>.</p>
+  <p>Most ATLAS tactics are inherited from ATT&amp;CK; <strong>two are AI-native</strong> — <em>AI Model Access</em> and <em>AI Attack Staging</em> (renamed <em>AI Attack Adaptation</em> in the 2026.08 release, reflecting agents that adapt an attack at runtime). The framework has grown rapidly with agentic-AI threats: the release used as the baseline throughout this section, <strong>ATLAS v2026.09 (15 September 2026)</strong>, contains <strong>16 tactics, 208 techniques, 40 mitigations and 73 case studies</strong> — of which 23 are documented real-world incidents rather than red-team exercises.</p>
+
+  <div class="scroller" style="margin-bottom:6px">
+    <table class="tbl" style="min-width:640px">
+      <thead><tr><th>Dimension</th><th>MITRE ATT&amp;CK (Enterprise v19)</th><th>MITRE ATLAS (v2026.09)</th></tr></thead>
+      <tbody>
+        <tr><td>Target</td><td>Conventional IT: endpoints, network, cloud, ICS</td><td>AI/ML systems: models, data, pipelines, agents</td></tr>
+        <tr><td>ID prefix</td><td><code>T####</code> / <code>TA####</code></td><td><code>AML.T####</code> / <code>AML.TA####</code></td></tr>
+        <tr><td>Tactics</td><td>15</td><td>16 (14 shared + 2 AI-native)</td></tr>
+        <tr><td>AI-native tactics</td><td>—</td><td>AI Model Access · AI Attack Staging / Adaptation</td></tr>
+        <tr><td>Signature techniques</td><td>Phishing, LSASS dumping, DLL side-loading</td><td>Prompt injection, jailbreak, RAG poisoning, model extraction, agent tool poisoning</td></tr>
+        <tr><td>Relationship</td><td colspan="2">Complementary — ATLAS techniques frequently chain into ATT&amp;CK ones once the attacker is on a host. Many ATLAS techniques carry an <code>Enterprise</code> platform tag and reference their ATT&amp;CK parent.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="src">Frameworks: MITRE ATLAS <code>atlas.mitre.org</code> (data v2026.09, Apache-2.0, © 2021–2026 The MITRE Corporation) and MITRE ATT&amp;CK Enterprise v19. Counts and technique details below are taken directly from the published ATLAS dataset, not summarised from memory.</p>
+
+  <h3>5.3 &nbsp;The ATLAS matrix at a glance</h3>
+  <p>Tactics read left-to-right as an operation progresses (though real attacks loop and skip). Techniques shown in <span style="color:var(--rust-deep);font-weight:600">rust</span> are generative-/agentic-AI-specific — the LLM-era additions. The two AI-native tactic columns have a rust header. Scroll horizontally to see all sixteen.</p>
+  <div class="legend">
+    <span><i style="background:#b5533c"></i> Generative / agentic-AI technique</span>
+    <span><i style="background:#0d1b2a"></i> Shared with ATT&amp;CK</span>
+    <span><i style="background:#98422e"></i> AI-native tactic</span>
+  </div>
+  <div class="scroller"><div class="matrix">
+    <div class="mcol"><div class="mh"><span>Reconnaissance</span><span class="mid">AML.TA0002</span></div><ul>
+      <li>Search Open Technical Databases</li>
+      <li>Search Open AI Vulnerability Analysis</li>
+      <li>Search Victim-Owned Websites</li>
+      <li>Search Application Repositories</li>
+      <li class="llm">Active Scanning</li>
+      <li class="llm">Gather RAG-Indexed Targets</li>
+      <li>Gather Victim Identity Information</li>
+      <li>Search Open Websites/Domains</li>
+      <li class="llm">Autonomous Reconnaissance</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Resource Development</span><span class="mid">AML.TA0003</span></div><ul>
+      <li class="llm">Acquire Public AI Artifacts</li>
+      <li>Acquire Infrastructure</li>
+      <li class="llm">Obtain Capabilities</li>
+      <li class="llm">Develop Capabilities</li>
+      <li>Establish Accounts</li>
+      <li class="llm">Publish Hallucinated Entities</li>
+      <li>Stage Capabilities</li>
+      <li class="llm">Publish Poisoned AI Artifacts</li>
+      <li>Compromise Infrastructure</li>
+    </ul></div>
+    <div class="mcol"><div class="mh ai"><span>AI Attack Adaptation</span><span class="mid">AML.TA0001</span></div><ul>
+      <li class="llm">Create Proxy AI Model</li>
+      <li class="llm">Manipulate AI Model</li>
+      <li class="llm">Verify Attack</li>
+      <li>Craft Adversarial Data</li>
+      <li class="llm">LLM Prompt Crafting</li>
+      <li class="llm">Retrieval Content Crafting</li>
+      <li>Generate Deepfakes</li>
+      <li>Generate Malicious Commands</li>
+      <li class="llm">Autonomous Attack-Path Adaptation</li>
+      <li class="llm">Autonomous AI Agent Communication</li>
+      <li class="llm">Autonomous Attack Orchestration</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Initial Access</span><span class="mid">AML.TA0004</span></div><ul>
+      <li class="llm">AI Supply Chain Compromise</li>
+      <li>Valid Accounts</li>
+      <li>Evade AI Model</li>
+      <li>Exploit Public-Facing Application</li>
+      <li>Phishing</li>
+      <li>Drive-by Compromise</li>
+      <li class="llm">Prompt Infiltration via Public-Facing Application</li>
+      <li>Exploit Automated Artifact Processing Pipeline</li>
+      <li class="llm">Crafted AI Assistant Links</li>
+      <li class="llm">Misconfigured or Publicly Exposed AI Services</li>
+    </ul></div>
+    <div class="mcol"><div class="mh ai"><span>AI Model Access</span><span class="mid">AML.TA0000</span></div><ul>
+      <li class="llm">AI Model Inference API Access</li>
+      <li class="llm">Physical Environment Access</li>
+      <li class="llm">Full AI Model Access</li>
+      <li class="llm">AI-Enabled Product or Service</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Execution</span><span class="mid">AML.TA0005</span></div><ul>
+      <li class="llm">User Execution</li>
+      <li>Command and Scripting Interpreter</li>
+      <li class="llm">LLM Prompt Injection</li>
+      <li class="llm">AI Agent Tool Invocation</li>
+      <li class="llm">AI Agent Clickbait</li>
+      <li class="llm">Deploy AI Agent</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Persistence</span><span class="mid">AML.TA0006</span></div><ul>
+      <li class="llm">Manipulate AI Model</li>
+      <li class="llm">Training Data Poisoning</li>
+      <li class="llm">LLM Prompt Self-Replication</li>
+      <li class="llm">RAG Poisoning</li>
+      <li class="llm">AI Agent Context Poisoning</li>
+      <li class="llm">Modify AI Agent Configuration</li>
+      <li class="llm">Prompt Infiltration via Public-Facing Application</li>
+      <li class="llm">AI Agent Tool Data Poisoning</li>
+      <li class="llm">AI Agent Tool Poisoning</li>
+      <li>AI Agent Environment Reconstruction</li>
+      <li>Create Account</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Privilege Escalation</span><span class="mid">AML.TA0012</span></div><ul>
+      <li>Valid Accounts</li>
+      <li class="llm">AI Agent Tool Invocation</li>
+      <li class="llm">LLM Jailbreak</li>
+      <li>Escape to Host</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Defense Evasion</span><span class="mid">AML.TA0007</span></div><ul>
+      <li>Evade AI Model</li>
+      <li class="llm">LLM Jailbreak</li>
+      <li class="llm">LLM Trusted Output Components Manipulation</li>
+      <li class="llm">LLM Prompt Obfuscation</li>
+      <li class="llm">False RAG Entry Injection</li>
+      <li>Impersonation</li>
+      <li>Masquerading</li>
+      <li class="llm">Corrupt AI Model</li>
+      <li class="llm">Modify AI Agent Configuration</li>
+      <li class="llm">Manipulate User LLM Chat History</li>
+      <li class="llm">Delay Execution of LLM Instructions</li>
+      <li>Virtualization/Sandbox Evasion</li>
+      <li>Exploitation for Defense Evasion</li>
+      <li class="llm">AI Supply Chain Rug Pull</li>
+      <li class="llm">AI Supply Chain Reputation Inflation</li>
+      <li>Obfuscated Files or Information</li>
+      <li class="llm">Triggers in Multimodal Inputs</li>
+      <li class="llm">AI Targeted Cloaking</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Credential Access</span><span class="mid">AML.TA0013</span></div><ul>
+      <li>Unsecured Credentials</li>
+      <li class="llm">RAG Credential Harvesting</li>
+      <li class="llm">Credentials from AI Agent Configuration</li>
+      <li>OS Credential Dumping</li>
+      <li class="llm">AI Agent Tool Credential Harvesting</li>
+      <li>Exploitation for Credential Access</li>
+      <li>Steal Web Session Cookie</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Discovery</span><span class="mid">AML.TA0008</span></div><ul>
+      <li class="llm">Discover AI Artifacts</li>
+      <li>Discover AI Model Ontology</li>
+      <li class="llm">Discover AI Model Family</li>
+      <li class="llm">Discover LLM Hallucinations</li>
+      <li class="llm">Discover AI Model Outputs</li>
+      <li class="llm">Discover LLM System Information</li>
+      <li>Enterprise Resource Discovery</li>
+      <li class="llm">Discover AI Agent Configuration</li>
+      <li>Enterprise Environment Discovery</li>
+      <li class="llm">Discover AI Agent Runtime Capabilities</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Lateral Movement</span><span class="mid">AML.TA0015</span></div><ul>
+      <li>Valid Accounts</li>
+      <li>Phishing</li>
+      <li class="llm">AI Agent Tool Invocation</li>
+      <li>Use Alternate Authentication Material</li>
+      <li>Exploitation of Remote Services</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Collection</span><span class="mid">AML.TA0009</span></div><ul>
+      <li class="llm">AI Artifact Collection</li>
+      <li>Data from Information Repositories</li>
+      <li>Data from Local System</li>
+      <li class="llm">Data from AI Services</li>
+      <li>Automated Collection</li>
+      <li>Data Staged</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Command and Control</span><span class="mid">AML.TA0014</span></div><ul>
+      <li>Cyber Communication Channel</li>
+      <li class="llm">AI Service API</li>
+      <li class="llm">AI Agent</li>
+      <li>AI Service Web Interface</li>
+      <li class="llm">AI Artifact Repository</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Exfiltration</span><span class="mid">AML.TA0010</span></div><ul>
+      <li class="llm">Exfiltration via AI Inference API</li>
+      <li>Exfiltration via Cyber Means</li>
+      <li class="llm">Extract LLM System Prompt</li>
+      <li class="llm">LLM Data Leakage</li>
+      <li class="llm">LLM Response Rendering</li>
+      <li class="llm">Exfiltration via AI Agent Tool Invocation</li>
+    </ul></div>
+    <div class="mcol"><div class="mh"><span>Impact</span><span class="mid">AML.TA0011</span></div><ul>
+      <li>Evade AI Model</li>
+      <li class="llm">Denial of AI Service</li>
+      <li class="llm">Erode AI Model Integrity</li>
+      <li class="llm">Cost Harvesting</li>
+      <li class="llm">Spamming AI System with Chaff Data</li>
+      <li class="llm">External Harms</li>
+      <li class="llm">Erode Dataset Integrity</li>
+      <li class="llm">Data Destruction via AI Agent Tool Invocation</li>
+      <li class="llm">Machine Compromise</li>
+      <li class="llm">AI Agent Response Biasing</li>
+    </ul></div>
+  </div></div>  <p class="mnote">All 16 tactics with their top-level techniques, taken verbatim from ATLAS v2026.09. Sub-techniques are omitted here for legibility and expanded in the per-tactic notes below.</p>
+  </div>
+<hr class="divider">
+
+  <div class="wrap">
+  <h3 style="margin-top:2.2em">5.4 &nbsp;The tactics, technique by technique</h3>
+  <p>Each tactic below opens with the adversary goal, then lists its techniques with ATLAS IDs and platform tags (Gen = Generative AI, Agent = Agentic AI, Pred = Predictive AI, Ent = Enterprise). Descriptions are condensed from the ATLAS v2026.09 dataset. Two tactics from the full matrix &mdash; <em>Lateral Movement</em> and <em>Command &amp; Control</em> &mdash; sit among these in the matrix above; both are largely shared with ATT&amp;CK and are folded into the discussion where they connect.</p>
+  </div>
+  <div class="wrap">
+  <h4 id="t-recon" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0002</span><br>01. Reconnaissance</h4>
+  <p>Gather information about the target AI system to plan the operation. This is where an attacker learns what model family is in use, what its attack surface looks like, and what data feeds it &mdash; much of it from entirely public sources. The 2026 additions push reconnaissance into autonomy: an agent given only a goal can decide what to look for.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0000</span> <span class="tnm">Search Open Technical Databases</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Mine published research, pre-print repos, technical blogs and scan databases for details of a target model or its stack.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0001</span> <span class="tnm">Search Open AI Vulnerability Analysis</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Search public AI vulnerability write-ups and disclosures relevant to the target.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0003</span> <span class="tnm">Search Victim-Owned Websites</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Harvest AI-relevant details from the victim’s own websites.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0004</span> <span class="tnm">Search Application Repositories</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Inspect public app repositories for AI code, configs and secrets.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0006</span> <span class="tnm">Active Scanning</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Actively probe hosts and APIs — enumerate hosted AI resources, query platform metadata APIs, scan for exposed AI infra, and probe agent trigger channels.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0064</span> <span class="tnm">Gather RAG-Indexed Targets</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Identify the data sources a RAG system indexes, so they can later be poisoned.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0087</span> <span class="tnm">Gather Victim Identity Information</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Collect victim identity data (names, emails, MFA config) for targeting.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0095</span> <span class="tnm">Search Open Websites/Domains</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Search public sites/domains, including code repositories, for attack-surface intel.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0116</span> <span class="tnm">Autonomous Reconnaissance</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Use an autonomous agent to drive reconnaissance from a goal or partial lead — deciding what to look for and how.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-resdev" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0003</span><br>02. Resource Development</h4>
+  <p>Establish the resources needed to attack: infrastructure, accounts, and &mdash; distinctively for AI &mdash; <em>artifacts</em>. This tactic includes publishing poisoned models and datasets, standing up AI-service proxies to launder frontier-model access, and &ldquo;slopsquatting&rdquo;: registering the fake packages an LLM is known to hallucinate.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0002</span> <span class="tnm">Acquire Public AI Artifacts</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Acquire public AI artifacts — datasets, models, or agent configurations — to study or repurpose.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0008</span> <span class="tnm">Acquire Infrastructure</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Stand up infrastructure: dev workspaces, hardware, domains, serverless, and AI-service proxies that resell frontier-model access.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0016</span> <span class="tnm">Obtain Capabilities</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Obtain off-the-shelf capabilities — attack implementations, tooling, generative-AI, exploits, and agent tools.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0017</span> <span class="tnm">Develop Capabilities</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Develop custom capabilities: adversarial attacks, autonomous exploit development, and malicious agent tools.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0021</span> <span class="tnm">Establish Accounts</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Register accounts with services for targeting, staging, or impersonation.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0060</span> <span class="tnm">Publish Hallucinated Entities</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Register a real entity (package, domain, email) matching a name an LLM reliably hallucinates — “slopsquatting.”</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0079</span> <span class="tnm">Stage Capabilities</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Stage developed or obtained capabilities on infrastructure the adversary controls.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0115</span> <span class="tnm">Publish Poisoned AI Artifacts</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Publish poisoned datasets, models or agent tools through public distribution channels to compromise downstream systems.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0128</span> <span class="tnm">Compromise Infrastructure</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Compromise third-party infrastructure and repurpose it against the AI target.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-initial" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0004</span><br>03. Initial Access</h4>
+  <p>Get a foothold in the AI system. Alongside classic vectors (valid accounts, exploiting public apps, phishing), the LLM era adds prompt-infiltration &mdash; planting malicious prompts where an AI will later ingest them &mdash; crafted assistant links, and simply finding the many AI services left publicly exposed. Note that <em>prompt injection itself</em> is frequently the initial-access vector.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0010</span> <span class="tnm">AI Supply Chain Compromise</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Compromise the AI supply chain — hardware, AI software, data, models, container registries, or agent tools.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0012</span> <span class="tnm">Valid Accounts</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Use valid stolen or default credentials to access the system.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0015</span> <span class="tnm">Evade AI Model</span> <span class="plat">Pred</span><p style="margin:.25em 0 .1em">Feed adversarial input crafted to be misclassified, gaining access by defeating an ML gate.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0049</span> <span class="tnm">Exploit Public-Facing Application</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Exploit a vulnerability in a public-facing application.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0052</span> <span class="tnm">Phishing</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Phishing — including LLM-authored spearphishing and deepfake-assisted lures.</p>
+      <div class="subt"><b>AML.T0052.000</b> Spearphishing via Social Engineering LLM.</div>
+      <div class="subt"><b>AML.T0052.001</b> Deepfake-Assisted Phishing.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0078</span> <span class="tnm">Drive-by Compromise</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Drive-by compromise: a visited page (or an agent fetching the web) delivers an injection or payload.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0093</span> <span class="tnm">Prompt Infiltration via Public-Facing Application</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">(also Persistence) Seeded prompts that persist in a public-facing app to affect future AI interactions.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0119</span> <span class="tnm">Exploit Automated Artifact Processing Pipeline</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Submit an artifact that triggers an automated processing pipeline and exploits weak processing logic.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0131</span> <span class="tnm">Crafted AI Assistant Links</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Craft links that open an AI assistant with attacker-supplied input already loaded (e.g. via a “?q=” parameter).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0132</span> <span class="tnm">Misconfigured or Publicly Exposed AI Services</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Reach AI services left misconfigured or publicly exposed — missing auth, permissive access.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-modelaccess" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0000</span><br>04. AI Model Access</h4>
+  <p><span class="pill new">AI-NATIVE TACTIC</span> Gain some level of access to the model itself &mdash; the precondition for many AI-specific attacks. Access ranges from black-box (an inference API), through indirect (an AI-enabled product), to full white-box knowledge of weights and architecture. The level of access an attacker holds dictates which staging and exfiltration techniques become available.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0040</span> <span class="tnm">AI Model Inference API Access</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Legitimate inference-API access — a means to probe, stage, and extract.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0041</span> <span class="tnm">Physical Environment Access</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Access the physical environment where the model’s input data is collected.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0044</span> <span class="tnm">Full AI Model Access</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Full white-box access — architecture, parameters, ontology — enabling offline attack crafting.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0047</span> <span class="tnm">AI-Enabled Product or Service</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Indirect access via an AI-enabled product or service that may leak model detail in logs/metadata.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-exec" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0005</span><br>05. Execution</h4>
+  <p>Run adversary-controlled behaviour &mdash; code, or model actions. This is the home of <strong>LLM Prompt Injection (AML.T0051)</strong>, the defining LLM technique, and of <strong>AI Agent Tool Invocation</strong>, where a subverted agent is made to call its own tools. In agentic systems, &ldquo;execution&rdquo; increasingly means the model taking real actions in the world.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0011</span> <span class="tnm">User Execution</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Rely on a user to load/run an unsafe artifact, malicious package, poisoned agent tool, or malicious link.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0050</span> <span class="tnm">Command and Scripting Interpreter</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Abuse a command/script interpreter to run code.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0051</span> <span class="tnm">LLM Prompt Injection</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Prompt Injection — craft inputs that override the model’s instructions. Direct, indirect (via ingested data), or triggered by an environment event.</p>
+      <div class="subt"><b>AML.T0051.000</b> Direct — the adversary injects as the user.</div>
+      <div class="subt"><b>AML.T0051.001</b> Indirect — injection arrives via ingested data (docs, email, web, DB).</div>
+      <div class="subt"><b>AML.T0051.002</b> Triggered — fires on a user action or environment event.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0053</span> <span class="tnm">AI Agent Tool Invocation</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">AI Agent Tool Invocation — use agent access to call its tools (APIs, data, code execution).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0100</span> <span class="tnm">AI Agent Clickbait</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Bait a computer-using agent or AI browser with deceptive UI/content into clicking or navigating.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0103</span> <span class="tnm">Deploy AI Agent</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Deploy the adversary’s own AI agent inside the victim environment to act on their behalf.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-persist" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0006</span><br>06. Persistence</h4>
+  <p>Keep the foothold across restarts, resets, and credential changes. For AI this means poisoning the model or its training data, corrupting an agent&rsquo;s memory or configuration so changes outlive a single session, poisoning RAG stores, and self-replicating prompts that propagate on their own &mdash; the mechanism behind worm-style attacks like Morris II.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0018</span> <span class="tnm">Manipulate AI Model</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Manipulate the model — poison it, alter architecture, embed malware, or change prompt-construction logic.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0020</span> <span class="tnm">Training Data Poisoning</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Poison training data so learned behaviour serves the adversary.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0061</span> <span class="tnm">LLM Prompt Self-Replication</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">A self-replicating prompt that induces the LLM to reproduce it in output — propagating to other LLMs (worm-like).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0070</span> <span class="tnm">RAG Poisoning</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">RAG Poisoning — inject malicious content into RAG-indexed data so it surfaces in future results.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0080</span> <span class="tnm">AI Agent Context Poisoning</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">AI Agent Context Poisoning — persistently alter an agent’s memory or thread context to change its behaviour.</p>
+      <div class="subt"><b>AML.T0080.000</b> Memory.</div>
+      <div class="subt"><b>AML.T0080.001</b> Thread.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0081</span> <span class="tnm">Modify AI Agent Configuration</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Modify AI agent configuration (system prompt, knowledge sources, tools) so changes persist across sessions.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0099</span> <span class="tnm">AI Agent Tool Data Poisoning</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Poison data in a source an agent tool reads from (repos, DBs, knowledge bases).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0110</span> <span class="tnm">AI Agent Tool Poisoning</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">AI Agent Tool Poisoning — corrupt a tool’s definition, implementation, or runtime response (incl. MCP servers).</p>
+      <div class="subt"><b>AML.T0110.000</b> Definition & Instructions.</div>
+      <div class="subt"><b>AML.T0110.001</b> Implementation.</div>
+      <div class="subt"><b>AML.T0110.002</b> Runtime Response.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0121</span> <span class="tnm">AI Agent Environment Reconstruction</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">An autonomous agent reconstructs its environment (tools, creds, access) to survive a reset.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0125</span> <span class="tnm">Create Account</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Create an account to maintain access to the AI system or its infrastructure.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-privesc" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0012</span><br>07. Privilege Escalation</h4>
+  <p>Gain higher-level permissions. In an AI context the standout is the <strong>LLM Jailbreak (AML.T0054)</strong>: overriding the model&rsquo;s alignment escalates what it is willing to do, effectively raising the attacker&rsquo;s privilege over the model&rsquo;s behaviour. Container escape and valid-account abuse escalate on the underlying host.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0012</span> <span class="tnm">Valid Accounts</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Use valid stolen or default credentials to access the system.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0053</span> <span class="tnm">AI Agent Tool Invocation</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">AI Agent Tool Invocation — use agent access to call its tools (APIs, data, code execution).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0054</span> <span class="tnm">LLM Jailbreak</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Jailbreak — override the model’s safety/alignment to elicit withheld behaviour, escalating what it will do.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0105</span> <span class="tnm">Escape to Host</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Escape a container/VM to reach the host.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-evasion" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0007</span><br>08. Defense Evasion</h4>
+  <p>Avoid detection &mdash; by human reviewers, by LLM guardrails, and by AI-enabled security tools. This is ATLAS&rsquo;s largest tactic, and it is rich with LLM-specific moves: obfuscating injections in invisible or encoded text, hiding triggers in one modality of a multimodal input, manipulating citations and chat history, false RAG entries, supply-chain rug pulls, and cloaking that shows benign content to humans but malicious content to AI clients.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0015</span> <span class="tnm">Evade AI Model</span> <span class="plat">Pred</span><p style="margin:.25em 0 .1em">Feed adversarial input crafted to be misclassified, gaining access by defeating an ML gate.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0054</span> <span class="tnm">LLM Jailbreak</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Jailbreak — override the model’s safety/alignment to elicit withheld behaviour, escalating what it will do.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0067</span> <span class="tnm">LLM Trusted Output Components Manipulation</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Manipulate response components (language, links, citations) so the LLM appears trustworthy.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0068</span> <span class="tnm">LLM Prompt Obfuscation</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Prompt Obfuscation — hide injections via tiny/invisible text, encoding (Base64/ROT13), or multimodal tricks.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0071</span> <span class="tnm">False RAG Entry Injection</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">False RAG Entry Injection — smuggle a fake “retrieved document” inside a legitimate RAG entry.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0073</span> <span class="tnm">Impersonation</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Impersonate a trusted person/org to manipulate a target.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0074</span> <span class="tnm">Masquerading</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Masquerade — manipulate an artifact’s name/location to look benign to users and tools.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0076</span> <span class="tnm">Corrupt AI Model</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Corrupt a malicious model file so a scanner fails to deserialize it, while it still executes first.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0081</span> <span class="tnm">Modify AI Agent Configuration</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Modify AI agent configuration (system prompt, knowledge sources, tools) so changes persist across sessions.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0092</span> <span class="tnm">Manipulate User LLM Chat History</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Manipulate the user’s LLM chat history to cover tracks.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0094</span> <span class="tnm">Delay Execution of LLM Instructions</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Delay execution — instructions that fire on a future event/keyword to evade inspection.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0097</span> <span class="tnm">Virtualization/Sandbox Evasion</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Virtualization/sandbox evasion.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0107</span> <span class="tnm">Exploitation for Defense Evasion</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Exploit a vulnerability specifically to bypass a security feature.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0109</span> <span class="tnm">AI Supply Chain Rug Pull</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">AI Supply Chain Rug Pull — publish a legitimate component, gain adoption, then push a malicious update.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0111</span> <span class="tnm">AI Supply Chain Reputation Inflation</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Inflate a malicious component’s reputation with fabricated trust signals to drive adoption.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0123</span> <span class="tnm">Obfuscated Files or Information</span> <span class="plat">Pred·Ent</span><p style="margin:.25em 0 .1em">Obfuscate files/data by encryption or encoding to evade defenses, including AI defenders.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0129</span> <span class="tnm">Triggers in Multimodal Inputs</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Hide triggers in one modality of a multimodal input (e.g. text-in-image) unseen by single-modality filters.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0134</span> <span class="tnm">AI Targeted Cloaking</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">AI Targeted Cloaking — serve malicious content to AI clients but benign content to humans/crawlers.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-cred" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0013</span><br>09. Credential Access</h4>
+  <p>Steal credentials. The AI-specific twist: credentials leak <em>through</em> the AI. They get inadvertently indexed into RAG stores and retrieved, sit in agent configurations, or are harvested by an agent&rsquo;s own tools reaching into SharePoint, Drive, or GitHub &mdash; the model becomes the credential-exfiltration path.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0055</span> <span class="tnm">Unsecured Credentials</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Find insecurely stored credentials (plaintext files, env vars, keys).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0082</span> <span class="tnm">RAG Credential Harvesting</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">RAG Credential Harvesting — pull credentials that were inadvertently indexed into a RAG store.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0083</span> <span class="tnm">Credentials from AI Agent Configuration</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Read credentials (API keys, tokens) out of an AI agent’s configuration.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0090</span> <span class="tnm">OS Credential Dumping</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">OS credential dumping from caches, memory, or stores.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0098</span> <span class="tnm">AI Agent Tool Credential Harvesting</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Use agent tool access to harvest credentials from connected sources (SharePoint, Drive, GitHub).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0106</span> <span class="tnm">Exploitation for Credential Access</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Exploit a software vulnerability to obtain credentials.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0113</span> <span class="tnm">Steal Web Session Cookie</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Steal a web session cookie to authenticate to an AI-enabled system.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-discovery" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0008</span><br>10. Discovery</h4>
+  <p>Map the AI environment from the inside. Beyond classic enterprise discovery, attackers fingerprint the model family, extract the system prompt and its special keywords, enumerate an agent&rsquo;s tools and activation triggers, and &mdash; crucially &mdash; discover the model&rsquo;s reliable hallucinations to feed the resource-development stage.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0007</span> <span class="tnm">Discover AI Artifacts</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Discover AI artifacts on the system — training stack, data systems, registries, model zoos.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0013</span> <span class="tnm">Discover AI Model Ontology</span> <span class="plat">Pred</span><p style="margin:.25em 0 .1em">Discover the model’s ontology (its output classes).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0014</span> <span class="tnm">Discover AI Model Family</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Identify the general model family from docs or crafted probes.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0062</span> <span class="tnm">Discover LLM Hallucinations</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Discover LLM Hallucinations — prompt the model to find fake packages/URLs/orgs to later register.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0063</span> <span class="tnm">Discover AI Model Outputs</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Discover model outputs (class scores) exposed in logs or API responses.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0069</span> <span class="tnm">Discover LLM System Information</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Discover LLM system information — the system prompt, special-character sets, or capability keywords.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0075</span> <span class="tnm">Enterprise Resource Discovery</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Enterprise resource discovery (accounts, systems, storage, cloud objects).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0084</span> <span class="tnm">Discover AI Agent Configuration</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Discover an agent’s configuration — embedded knowledge, tool definitions, activation triggers, call chains.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0089</span> <span class="tnm">Enterprise Environment Discovery</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Enterprise environment discovery (configs, connections, trust, defensive tooling).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0133</span> <span class="tnm">Discover AI Agent Runtime Capabilities</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Probe an agent at runtime to surface its tools, parameters, reach and permissions — without its config.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-collection" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0009</span><br>11. Collection</h4>
+  <p>Gather the data and artifacts the operation is after. Models, datasets, and telemetry are collected for exfiltration or for offline attack staging; agentic tools and RAG databases become bulk-collection channels, often fully automated with no human selecting each item.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0035</span> <span class="tnm">AI Artifact Collection</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Collect AI artifacts (models, datasets, telemetry) for exfiltration or staging.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0036</span> <span class="tnm">Data from Information Repositories</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Data from information repositories.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0037</span> <span class="tnm">Data from Local System</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Data from the local system.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0085</span> <span class="tnm">Data from AI Services</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Data from AI services — pull proprietary info via RAG databases or agent tools.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0126</span> <span class="tnm">Automated Collection</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Automated collection via scripts, CLIs, or agent tools — no human picking each item.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0127</span> <span class="tnm">Data Staged</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Stage collected data centrally before exfiltration.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-staging" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0001</span><br>12. AI Attack Staging / Adaptation</h4>
+  <p><span class="pill new">AI-NATIVE TACTIC</span> Turn capabilities and knowledge into a ready-to-fire attack, tailored to the target. This is where adversarial examples are crafted and <em>verified</em> against a proxy or the live API, prompts and retrieval content are engineered, deepfakes and malicious commands are generated, and &mdash; in the 2026.08 rename to <em>AI Attack Adaptation</em> &mdash; autonomous agents build, revise, coordinate, and communicate attack paths at runtime.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0005</span> <span class="tnm">Create Proxy AI Model</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Create a proxy model to simulate the target offline (train from artifacts, replicate, or use a pre-trained one).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0018</span> <span class="tnm">Manipulate AI Model</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Manipulate the model — poison it, alter architecture, embed malware, or change prompt-construction logic.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0042</span> <span class="tnm">Verify Attack</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Verify the attack works via inference API or an offline copy before deploying it.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0043</span> <span class="tnm">Craft Adversarial Data</span> <span class="plat">Pred</span><p style="margin:.25em 0 .1em">Craft adversarial data — white-box/black-box optimization, transfer, manual, or backdoor triggers.</p>
+      <div class="subt"><b>AML.T0043.004</b> Insert Backdoor Trigger.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0065</span> <span class="tnm">LLM Prompt Crafting</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Prompt Crafting — iteratively engineer prompts that reliably bypass defenses.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0066</span> <span class="tnm">Retrieval Content Crafting</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Retrieval Content Crafting — author content designed to be retrieved and influence the user.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0088</span> <span class="tnm">Generate Deepfakes</span> <span class="plat">Pred·Ent</span><p style="margin:.25em 0 .1em">Generate deepfakes — synthetic media for impersonation or fraud.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0102</span> <span class="tnm">Generate Malicious Commands</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Generate malicious commands dynamically from natural language — shifting signatures.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0117</span> <span class="tnm">Autonomous Attack-Path Adaptation</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Autonomous Attack-Path Adaptation — an agent builds and revises its own attack path toward a goal.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0118</span> <span class="tnm">Autonomous AI Agent Communication</span> <span class="plat">Agent·Ent</span><p style="margin:.25em 0 .1em">Autonomous AI Agent Communication — agents exchange tasking, discoveries and results (shared artifacts or direct).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0124</span> <span class="tnm">Autonomous Attack Orchestration</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">Autonomous Attack Orchestration — one system coordinates multiple agents toward a shared objective.</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-exfil" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0010</span><br>13. Exfiltration</h4>
+  <p>Steal data and model IP. AI opens novel channels: model extraction and inversion through the inference API, prompting the model to leak its training/connected data, inducing output that <em>renders</em> and beacons data to an attacker server (image/link exfil), and encoding stolen data into an agent tool call that looks like legitimate work &mdash; the pattern behind the Slack AI, EchoLeak, and Copilot exfiltration cases.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0024</span> <span class="tnm">Exfiltration via AI Inference API</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Exfiltrate via the inference API — membership inference, model inversion, or full model extraction.</p>
+      <div class="subt"><b>AML.T0024.000</b> Infer Training Data Membership.</div>
+      <div class="subt"><b>AML.T0024.001</b> Invert AI Model.</div>
+      <div class="subt"><b>AML.T0024.002</b> Extract AI Model — clone a private model by querying it.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0025</span> <span class="tnm">Exfiltration via Cyber Means</span> <span class="plat">Ent</span><p style="margin:.25em 0 .1em">Exfiltrate via conventional cyber means.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0056</span> <span class="tnm">Extract LLM System Prompt</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">Extract the LLM system prompt (valuable IP and an attack aid).</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0057</span> <span class="tnm">LLM Data Leakage</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Data Leakage — prompt the model to reveal training data, connected data, or other users’ data.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0077</span> <span class="tnm">LLM Response Rendering</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">LLM Response Rendering — induce output that renders (image/link) and beacons private data to the attacker’s server.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0086</span> <span class="tnm">Exfiltration via AI Agent Tool Invocation</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Exfiltration via AI Agent Tool Invocation — encode data into a tool call’s parameters (email, doc, request).</p>
+      </div>
+  </div>
+  </div>
+  <div class="wrap">
+  <h4 id="t-impact" style="font-family:var(--font-d);font-size:1.28rem;margin-top:2em;border-top:2px solid var(--ink);padding-top:.7em"><span style="font-family:var(--font-m);font-size:.72rem;color:var(--rust-deep)">AML.TA0011</span><br>14. Impact</h4>
+  <p>Manipulate, interrupt, erode trust in, or destroy the AI system and its data. Includes denial-of-service against expensive AI compute, cost harvesting to run up the victim&rsquo;s bill, eroding model/dataset integrity to destroy confidence, biasing an assistant&rsquo;s recommendations, and &mdash; for agents with write access &mdash; outright data destruction via tool invocation. The External Harms technique captures financial, reputational, societal, and user harm.</p>
+  <div class="box" style="background:#fbf8f1;padding:6px 18px">
+      <div class="tech"><span class="tid">AML.T0015</span> <span class="tnm">Evade AI Model</span> <span class="plat">Pred</span><p style="margin:.25em 0 .1em">Feed adversarial input crafted to be misclassified, gaining access by defeating an ML gate.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0029</span> <span class="tnm">Denial of AI Service</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Denial of AI Service — flood or craft heavy-compute inputs to degrade/shut down the service.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0031</span> <span class="tnm">Erode AI Model Integrity</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Erode AI Model Integrity — degrade performance over time to erode trust and waste resources.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0034</span> <span class="tnm">Cost Harvesting</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Cost Harvesting — drive up the victim’s AI bill via excessive, resource-intensive, or agentic queries.</p>
+      <div class="subt"><b>AML.T0034.002</b> Agentic Resource Consumption.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0046</span> <span class="tnm">Spamming AI System with Chaff Data</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Spam the system with chaff data to bury signal and waste analyst time.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0048</span> <span class="tnm">External Harms</span> <span class="plat">Gen·Agent·Pred·Ent</span><p style="margin:.25em 0 .1em">External Harms — financial, reputational, societal, user harm, and AI IP theft.</p>
+      <div class="subt"><b>AML.T0048.004</b> AI Intellectual Property Theft.</div>
+      </div>
+      <div class="tech"><span class="tid">AML.T0059</span> <span class="tnm">Erode Dataset Integrity</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Erode dataset integrity to reduce its usefulness and trust.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0101</span> <span class="tnm">Data Destruction via AI Agent Tool Invocation</span> <span class="plat">Agent</span><p style="margin:.25em 0 .1em">Data Destruction via AI Agent Tool Invocation — use a tool with write/delete power to wipe data.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0112</span> <span class="tnm">Machine Compromise</span> <span class="plat">Gen·Agent·Pred</span><p style="margin:.25em 0 .1em">Machine Compromise — exploit AI components to gain code execution and persist on the host.</p>
+      </div>
+      <div class="tech"><span class="tid">AML.T0130</span> <span class="tnm">AI Agent Response Biasing</span> <span class="plat">Gen·Agent</span><p style="margin:.25em 0 .1em">AI Agent Response Biasing — bias an assistant toward attacker-chosen sources/content.</p>
+      </div>
+  </div>
+  </div></section>
+<hr class="divider">
+<!-- ============ SECTION 6 ============ -->
+<section id="s6">
+  <div class="wrap">
+  <span class="snum">SECTION 06</span>
+  <h2>Real-World LLM Attack Tools</h2>
+  <p class="lead-in">In mid-2023, a wave of &ldquo;dark GPTs&rdquo; appeared on underground forums and Telegram &mdash; LLMs stripped of guardrails and sold to criminals. They are the practical embodiment of Section 4&rsquo;s offensive misuse. Treat vendor claims with scepticism: several were credible, uncensored models; others were likely jailbroken-prompt wrappers or outright scams. What follows is drawn from the original threat-intel reporting.</p>
+
+  <div class="box note">
+    <p class="h">HOW TO READ THESE</p>
+    <p>All three are &ldquo;<strong>uncensored assistant</strong>&rdquo; products: the selling point is the <em>removal</em> of the alignment layer (Section 3.1) so the model will write phishing, malware, and fraud content on demand. In ATLAS terms they are <code>AML.T0016.002</code> (Obtain Capabilities: Generative AI) sold as-a-service, used to drive <code>AML.T0052</code> phishing, <code>AML.T0102</code> malicious-command generation, and BEC fraud. Their real significance is <em>lowering the skill floor</em> for cybercrime.</p>
+  </div>
+
+  <h3>6.1 &nbsp;WormGPT</h3>
+  <p>The archetype. First announced as in-development on Hack Forums in March 2023 by a threat actor using the alias <strong>&ldquo;Last&rdquo;</strong>, and publicly released around June 2023, marketed as &ldquo;the biggest enemy of ChatGPT&rdquo; and a blackhat alternative. Security firm <strong>SlashNext</strong> analysed it in July 2023.</p>
+  <ul class="tight">
+    <li><strong>Base model:</strong> reportedly <code>GPT-J 6B</code> &mdash; the open-source 6-billion-parameter model released by EleutherAI in 2021 &mdash; fine-tuned by the creator on malware code, exploit write-ups, and phishing material.</li>
+    <li><strong>Primary use:</strong> business-email-compromise (BEC) and phishing. SlashNext had it generate a BEC lure and described the result as remarkably persuasive.</li>
+    <li><strong>Pricing:</strong> reported around &euro;60&ndash;&euro;100/month or &euro;550/year, with a private setup around &euro;5,000.</li>
+    <li><strong>Shutdown:</strong> the original was shut down on <strong>8 August 2023</strong> after investigative journalist Brian Krebs identified the operator, drawing intense media attention.</li>
+    <li><strong>Afterlife:</strong> &ldquo;WormGPT&rdquo; became a <em>brand</em>. Researchers at Cato Networks (2025) uncovered new variants that were in fact jailbroken wrappers around commercial models (xAI&rsquo;s Grok and Mistral&rsquo;s Mixtral), and a later &ldquo;WormGPT 4&rdquo; was advertised with tiered pricing.</li>
+  </ul>
+
+  <h3>6.2 &nbsp;FraudGPT</h3>
+  <p>Surfaced within days of WormGPT, advertised on the dark web and Telegram from around 22&ndash;25 July 2023 by an actor using the handle <strong>&ldquo;CanadianKingpin12&rdquo;</strong> (a known carding/fraud vendor). Documented by <strong>Netenrich</strong> and SlashNext.</p>
+  <ul class="tight">
+    <li><strong>Positioning:</strong> an all-in-one offensive toolkit &ldquo;with no boundaries.&rdquo; Advertised capabilities: writing spear-phishing and BEC emails, creating undetectable malware, generating phishing/scam pages, finding vulnerabilities and leaks, carding, and hacking tutorials. The seller claimed the model was refreshed every one to two weeks and swapped between underlying models.</li>
+    <li><strong>Pricing:</strong> subscription &mdash; roughly $200/month, ~$1,000 for six months, up to $1,700/year; the seller claimed 3,000+ sales.</li>
+    <li><strong>Distribution shift:</strong> the actor moved promotion to Telegram after clear-net forum threads were removed, and later teased related tools (&ldquo;DarkBERT&rdquo;, &ldquo;DarkBARD&rdquo;). Promotional channels and posts later disappeared.</li>
+  </ul>
+
+  <h3>6.3 &nbsp;XXXGPT</h3>
+  <p>Announced on the <strong>XSS.is</strong> forum around late July 2023 (dark-web monitor Falcon Feeds flagged it on 31 July), pitched as a &ldquo;revolutionary service offering personalized bot AI customization&hellip;with no censorship or restrictions,&rdquo; reportedly backed by a team of five.</p>
+  <ul class="tight">
+    <li><strong>Claimed focus:</strong> malicious <em>code</em> rather than just email &mdash; botnets, remote-access trojans (RATs), keyloggers, infostealers, ATM-malware kits, and cryptostealers.</li>
+    <li><strong>Pricing:</strong> reported around $90 for a one-month license.</li>
+    <li><strong>Credibility:</strong> heavily disputed. Trend Micro noted there was essentially no follow-up posting, no user feedback, and no testimonials; Sophos found a tester unable to get the demo to produce malware and observed censored responses &mdash; consistent with a possible jailbroken-prompt wrapper or a scam. Its current status is unclear. A useful reminder that underground &ldquo;capability&rdquo; claims are marketing until verified.</li>
+  </ul>
+
+  <div class="scroller">
+    <table class="tbl" style="min-width:680px">
+      <thead><tr><th>Tool</th><th>First seen</th><th>Sold via</th><th>Reported base / nature</th><th>Headline use</th><th>Reported pricing</th></tr></thead>
+      <tbody>
+        <tr><td><strong>WormGPT</strong></td><td>Mar&ndash;Jun 2023</td><td>Hack Forums</td><td>GPT-J 6B, fine-tuned (credible)</td><td>BEC / phishing</td><td>~&euro;60&ndash;100/mo; ~&euro;5k private</td></tr>
+        <tr><td><strong>FraudGPT</strong></td><td>Jul 2023</td><td>Dark web + Telegram</td><td>Undisclosed, rotated models</td><td>All-in-one fraud &amp; malware</td><td>~$200/mo &ndash; $1,700/yr</td></tr>
+        <tr><td><strong>XXXGPT</strong></td><td>Jul 2023</td><td>XSS.is forum</td><td>Disputed; possible wrapper/scam</td><td>Malware code: botnets, RATs, keyloggers</td><td>~$90/mo</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="src">Sources for Section 6: SlashNext, Netenrich, Cato Networks (Cato CTRL), Trend Micro, Sophos X-Ops, Outpost24, Krebs on Security, and Palo Alto Unit 42 reporting, 2023&ndash;2026. Figures are as reported by those researchers; underground pricing and capability claims are self-reported by sellers and vary between sources.</p>
+
+  <div class="box defense">
+    <p class="h">DEFENDER TAKEAWAY</p>
+    <p>You cannot block these tools at the source, and their output is designed to look legitimate. Defence shifts left and right of the model: <strong>reduce believable pretext</strong> (limit public info, brand-impersonation monitoring), <strong>harden the human layer</strong> against better phishing (out-of-band verification for payments, ATLAS <code>AML.M0018</code> user training), and <strong>detect on behaviour, not content</strong> &mdash; the malware and fraud still have to touch your endpoints, identity, and payment rails, where conventional ATT&amp;CK-aligned detection and controls still apply.</p>
+  </div>
+  </div>
+</section>
+
+<footer class="end">
+  <div class="wrap">
+    <h4>Using these notes</h4>
+    <p>This is a study and reference document, written for defensive understanding. The technique catalogue is condensed from the published <strong>MITRE ATLAS v2026.09</strong> dataset (Apache-2.0, &copy; 2021&ndash;2026 The MITRE Corporation, <a href="https://atlas.mitre.org">atlas.mitre.org</a>) and <strong>MITRE ATT&amp;CK Enterprise v19</strong>. For authoritative, current detail &mdash; full technique text, sub-techniques, mitigations, and the 73 case studies &mdash; work from the live matrices, since both frameworks update monthly.</p>
+    <p style="margin-bottom:0;color:#7d8f9c;font-size:.8rem">Baselines as of 28 September 2026: ATLAS 16 tactics / 208 techniques / 40 mitigations / 73 case studies (23 real-world incidents). ATT&amp;CK Enterprise 15 tactics / 222 techniques &mdash; note the v19 Defense Evasion &rarr; Stealth + Defense Impairment split. Cross-check anything you operationalise against the source.</p>
+  </div>
+</footer>
+
+  </main>
+</div>
+
+<script>
+  // active section highlight in the TOC
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('nav.toc a'));
+    var map={};
+    links.forEach(function(a){var id=a.getAttribute('href').slice(1);var el=document.getElementById(id);if(el)map[id]=a;});
+    var ids=Object.keys(map);
+    if(!('IntersectionObserver' in window)||!ids.length)return;
+    var io=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(l){l.classList.remove('on')});
+          if(map[e.target.id])map[e.target.id].classList.add('on');
+        }
+      });
+    },{rootMargin:'-10% 0px -80% 0px',threshold:0});
+    ids.forEach(function(id){io.observe(document.getElementById(id))});
+  })();
+</script>
+</body>
+</html>
